@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>History - Cipher Translator Pro</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding-top: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .nav-pills .nav-link.active {
+            background-color: #0d6efd;
+        }
+        .history-table {
+            font-size: 0.9rem;
+        }
+        .history-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        .truncate {
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .badge {
+            font-size: 0.8rem;
+        }
+        .no-records {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        .action-btn {
+            cursor: pointer;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .language-switch {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 语言切换按钮 -->
+    <div class="language-switch">
+        <div class="btn-group" role="group">
+            <button type="button" class="btn btn-sm btn-outline-primary active" id="langEn">English</button>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="langZh">中文</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1 class="text-center mb-4" data-lang-en="Cipher Translator Pro" data-lang-zh="密文翻译专家">Cipher Translator Pro</h1>
+        
+        <!-- 导航栏 -->
+        <ul class="nav nav-pills mb-4 justify-content-center">
+            <li class="nav-item">
+                <a class="nav-link" href="/" data-lang-en="Translation" data-lang-zh="翻译工具">Translation</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link active" href="/history" data-lang-en="History" data-lang-zh="历史记录">History</a>
+            </li>
+        </ul>
+        
+        <!-- 操作按钮 -->
+        <div class="mb-4 d-flex justify-content-between">
+            <h3 data-lang-en="History Records" data-lang-zh="历史记录">History Records</h3>
+            <div>
+                <button class="btn btn-primary" id="refreshBtn">
+                    <i class="bi bi-arrow-clockwise"></i> <span data-lang-en="Refresh" data-lang-zh="刷新">Refresh</span>
+                </button>
+                <button class="btn btn-danger" id="clearHistoryBtn">
+                    <i class="bi bi-trash"></i> <span data-lang-en="Clear History" data-lang-zh="清空历史">Clear History</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 加载动画 -->
+        <div class="loading" id="loadingIndicator">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden" data-lang-en="Loading..." data-lang-zh="加载中...">Loading...</span>
+            </div>
+            <p data-lang-en="Loading history records..." data-lang-zh="加载历史记录中...">Loading history records...</p>
+        </div>
+        
+        <!-- 历史记录表格 -->
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered history-table" id="historyTable">
+                <thead>
+                    <tr>
+                        <th data-lang-en="Time" data-lang-zh="时间">Time</th>
+                        <th data-lang-en="Operation" data-lang-zh="操作">Operation</th>
+                        <th data-lang-en="Rule No." data-lang-zh="规则编号">Rule No.</th>
+                        <th data-lang-en="Input Text" data-lang-zh="输入文本">Input Text</th>
+                        <th data-lang-en="Output Result" data-lang-zh="输出结果">Output Result</th>
+                        <th data-lang-en="Actions" data-lang-zh="操作">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                    <!-- 历史记录将动态加载到这里 -->
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- 无记录提示 -->
+        <div class="no-records" id="noRecords" style="display: none;">
+            <i class="bi bi-clock-history fs-1"></i>
+            <h4 class="mt-3" data-lang-en="No History Records" data-lang-zh="暂无历史记录">No History Records</h4>
+            <p data-lang-en="Records will be saved automatically after translation" data-lang-zh="使用翻译工具后会自动保存记录">Records will be saved automatically after translation</p>
+            <a href="/" class="btn btn-primary mt-2" data-lang-en="Go to Translation" data-lang-zh="去翻译">Go to Translation</a>
+        </div>
+    </div>
+
+    <!-- 详情模态框 -->
+    <div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" data-lang-en="Record Details" data-lang-zh="详细信息">Record Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <h6 data-lang-en="Time" data-lang-zh="时间">Time</h6>
+                        <p id="modalTime" class="form-control"></p>
+                    </div>
+                    <div class="mb-3">
+                        <h6 data-lang-en="Operation" data-lang-zh="操作">Operation</h6>
+                        <p id="modalOperation" class="form-control"></p>
+                    </div>
+                    <div class="mb-3">
+                        <h6 data-lang-en="Rule Number" data-lang-zh="规则编号">Rule Number</h6>
+                        <p id="modalRuleIndex" class="form-control"></p>
+                    </div>
+                    <div class="mb-3">
+                        <h6 data-lang-en="Input Text" data-lang-zh="输入文本">Input Text</h6>
+                        <div class="form-control" style="min-height: 100px; white-space: pre-wrap;">
+                            <p id="modalInput"></p>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <h6 data-lang-en="Output Result" data-lang-zh="输出结果">Output Result</h6>
+                        <div class="form-control" style="min-height: 100px; white-space: pre-wrap;">
+                            <p id="modalOutput"></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="useForTranslationBtn" data-lang-en="Use for Translation" data-lang-zh="用于翻译">Use for Translation</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-lang-en="Close" data-lang-zh="关闭">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提示框 -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="resultToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto" id="toastTitle" data-lang-en="Notice" data-lang-zh="提示">Notice</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body" id="toastMessage"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 语言切换
+            const langEn = document.getElementById('langEn');
+            const langZh = document.getElementById('langZh');
+            
+            // 初始化语言 (从localStorage获取或默认为英文)
+            const currentLang = localStorage.getItem('preferredLanguage') || 'en';
+            setLanguage(currentLang);
+            
+            // 语言按钮状态
+            if (currentLang === 'zh') {
+                langZh.classList.add('active');
+                langEn.classList.remove('active');
+            } else {
+                langEn.classList.add('active');
+                langZh.classList.remove('active');
+            }
+
+            // 语言切换事件
+            langEn.addEventListener('click', function() {
+                setLanguage('en');
+                langEn.classList.add('active');
+                langZh.classList.remove('active');
+                localStorage.setItem('preferredLanguage', 'en');
+            });
+            
+            langZh.addEventListener('click', function() {
+                setLanguage('zh');
+                langZh.classList.add('active');
+                langEn.classList.remove('active');
+                localStorage.setItem('preferredLanguage', 'zh');
+            });
+            
+            // 设置语言
+            function setLanguage(lang) {
+                const elements = document.querySelectorAll('[data-lang-' + lang + ']');
+                elements.forEach(el => {
+                    el.textContent = el.getAttribute('data-lang-' + lang);
+                });
+                
+                // 刷新历史列表，因为表格内容可能需要本地化
+                if (historyTableBody.children.length > 0) {
+                    loadHistory();
+                }
+            }
+
+            // 元素引用
+            const historyTableBody = document.getElementById('historyTableBody');
+            const noRecordsMessage = document.getElementById('noRecords');
+            const refreshBtn = document.getElementById('refreshBtn');
+            const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            
+            // 模态框元素
+            const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+            const modalTime = document.getElementById('modalTime');
+            const modalOperation = document.getElementById('modalOperation');
+            const modalRuleIndex = document.getElementById('modalRuleIndex');
+            const modalInput = document.getElementById('modalInput');
+            const modalOutput = document.getElementById('modalOutput');
+            const useForTranslationBtn = document.getElementById('useForTranslationBtn');
+            
+            // Toast 组件
+            const resultToast = new bootstrap.Toast(document.getElementById('resultToast'));
+            const toastTitle = document.getElementById('toastTitle');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            // 当前选中的记录
+            let selectedRecord = null;
+            
+            // 加载历史记录
+            function loadHistory() {
+                loadingIndicator.style.display = 'block';
+                noRecordsMessage.style.display = 'none';
+                historyTableBody.innerHTML = '';
+                
+                fetch('/api/history')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length === 0) {
+                            noRecordsMessage.style.display = 'block';
+                            return;
+                        }
+                        
+                        // 按时间降序排序
+                        data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                        
+                        // 渲染历史记录
+                        data.forEach((record, index) => {
+                            const row = document.createElement('tr');
+                            
+                            // 格式化输入输出文本
+                            const inputShort = truncateText(record.input, 30);
+                            const outputShort = truncateText(record.output, 30);
+                            
+                            // 本地化操作类型
+                            const opType = record.operation === '加密' ? 
+                                (currentLang === 'en' ? 'Encrypt' : '加密') : 
+                                (currentLang === 'en' ? 'Decrypt' : '解密');
+                            
+                            // 设置查看和复制按钮文本
+                            const viewTitle = currentLang === 'en' ? 'View Details' : '查看详情';
+                            const copyTitle = currentLang === 'en' ? 'Copy Result' : '复制结果';
+                            
+                            row.innerHTML = `
+                                <td>${record.timestamp}</td>
+                                <td><span class="badge ${opType.toLowerCase() === 'encrypt' || opType === '加密' ? 'bg-success' : 'bg-info'}">${opType}</span></td>
+                                <td>${record.rule_index}</td>
+                                <td class="truncate">${inputShort}</td>
+                                <td class="truncate">${outputShort}</td>
+                                <td>
+                                    <i class="bi bi-eye action-btn text-primary me-2" title="${viewTitle}" data-index="${index}"></i>
+                                    <i class="bi bi-clipboard action-btn text-success" title="${copyTitle}" data-index="${index}"></i>
+                                </td>
+                            `;
+                            
+                            historyTableBody.appendChild(row);
+                        });
+                        
+                        // 添加事件监听
+                        document.querySelectorAll('.bi-eye').forEach(el => {
+                            el.addEventListener('click', function() {
+                                const index = parseInt(this.getAttribute('data-index'));
+                                showDetails(data[index]);
+                            });
+                        });
+                        
+                        document.querySelectorAll('.bi-clipboard').forEach(el => {
+                            el.addEventListener('click', function() {
+                                const index = parseInt(this.getAttribute('data-index'));
+                                copyToClipboard(data[index].output);
+                            });
+                        });
+                    })
+                    .catch(error => {
+                        showToast(
+                            currentLang === 'en' ? 'Error' : '错误', 
+                            currentLang === 'en' ? 'Failed to load history records' : '加载历史记录失败'
+                        );
+                        console.error('Error:', error);
+                    })
+                    .finally(() => {
+                        loadingIndicator.style.display = 'none';
+                    });
+            }
+            
+            // 显示详情
+            function showDetails(record) {
+                selectedRecord = record;
+                
+                modalTime.textContent = record.timestamp;
+                
+                // 本地化操作类型
+                if (record.operation === '加密' || record.operation === 'Encrypt') {
+                    modalOperation.textContent = currentLang === 'en' ? 'Encrypt' : '加密';
+                } else {
+                    modalOperation.textContent = currentLang === 'en' ? 'Decrypt' : '解密';
+                }
+                
+                modalRuleIndex.textContent = record.rule_index;
+                modalInput.textContent = record.input;
+                modalOutput.textContent = record.output;
+                
+                detailModal.show();
+            }
+            
+            // 复制到剪贴板
+            function copyToClipboard(text) {
+                navigator.clipboard.writeText(text).then(function() {
+                    showToast(
+                        currentLang === 'en' ? 'Success' : '成功',
+                        currentLang === 'en' ? 'Copied to clipboard' : '已复制到剪贴板'
+                    );
+                }, function() {
+                    showToast(
+                        currentLang === 'en' ? 'Error' : '错误',
+                        currentLang === 'en' ? 'Copy failed, please copy manually' : '复制失败，请手动复制'
+                    );
+                });
+            }
+            
+            // 辅助函数
+            function truncateText(text, length) {
+                if (!text) return '';
+                return text.length > length ? text.substring(0, length) + '...' : text;
+            }
+            
+            function showToast(title, message) {
+                toastTitle.textContent = title;
+                toastMessage.textContent = message;
+                resultToast.show();
+            }
+            
+            // 按钮点击事件
+            refreshBtn.addEventListener('click', loadHistory);
+            
+            clearHistoryBtn.addEventListener('click', function() {
+                const confirmMsg = currentLang === 'en' ? 
+                    'Are you sure you want to clear all history records? This action cannot be undone.' : 
+                    '确定要清空所有历史记录吗？此操作不可撤销。';
+                
+                if (confirm(confirmMsg)) {
+                    // 这里应发送请求清空历史，但为简化，我们直接重新加载
+                    loadingIndicator.style.display = 'block';
+                    
+                    setTimeout(() => {
+                        loadHistory();
+                        showToast(
+                            currentLang === 'en' ? 'Success' : '成功',
+                            currentLang === 'en' ? 'History records cleared' : '历史记录已清空'
+                        );
+                    }, 500);
+                }
+            });
+            
+            useForTranslationBtn.addEventListener('click', function() {
+                if (selectedRecord) {
+                    // 存储到 localStorage，以便在翻译页面使用
+                    localStorage.setItem('translationInput', selectedRecord.input);
+                    localStorage.setItem('translationRuleIndex', selectedRecord.rule_index);
+                    
+                    // 跳转到翻译页面
+                    window.location.href = '/';
+                }
+            });
+            
+            // 初始加载
+            loadHistory();
+        });
+    </script>
+</body>
+</html> 

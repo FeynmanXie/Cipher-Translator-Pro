@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cipher Translator Pro</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding-top: 20px;
+        }
+        .container {
+            max-width: 900px;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .form-label {
+            font-weight: bold;
+        }
+        .nav-pills .nav-link.active {
+            background-color: #0d6efd;
+        }
+        .result-box {
+            min-height: 100px;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        .rule-info {
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        #resultText {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .language-switch {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 语言切换按钮 -->
+    <div class="language-switch">
+        <div class="btn-group" role="group">
+            <button type="button" class="btn btn-sm btn-outline-primary active" id="langEn">English</button>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="langZh">中文</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1 class="text-center mb-4" data-lang-en="Cipher Translator Pro" data-lang-zh="密文翻译专家">Cipher Translator Pro</h1>
+        
+        <!-- 导航栏 -->
+        <ul class="nav nav-pills mb-4 justify-content-center">
+            <li class="nav-item">
+                <a class="nav-link active" href="/" data-lang-en="Translation" data-lang-zh="翻译工具">Translation</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/history" data-lang-en="History" data-lang-zh="历史记录">History</a>
+            </li>
+        </ul>
+        
+        <!-- 操作区域 -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="operation" id="encrypt" value="encrypt" checked>
+                    <label class="form-check-label" for="encrypt" data-lang-en="Encrypt" data-lang-zh="加密">Encrypt</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="operation" id="decrypt" value="decrypt">
+                    <label class="form-check-label" for="decrypt" data-lang-en="Decrypt" data-lang-zh="解密">Decrypt</label>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div id="modeSelection" class="mb-3">
+                    <label class="form-label" data-lang-en="Encryption Mode:" data-lang-zh="加密模式:">Encryption Mode:</label>
+                    <select class="form-select" id="encryptMode">
+                        <option value="substitution" data-lang-en="Substitution Mode" data-lang-zh="替换模式">Substitution Mode</option>
+                        <option value="shift" data-lang-en="Shift Mode" data-lang-zh="移位模式">Shift Mode</option>
+                        <option value="mixed" data-lang-en="Mixed Mode" data-lang-zh="混合模式">Mixed Mode</option>
+                    </select>
+                </div>
+                <div id="ruleIndexGroup" class="mb-3" style="display: none;">
+                    <label class="form-label" for="ruleIndex" data-lang-en="Rule Number:" data-lang-zh="规则编号:">Rule Number:</label>
+                    <input type="number" class="form-control" id="ruleIndex" min="0" placeholder="Enter rule number" data-lang-en-placeholder="Enter rule number" data-lang-zh-placeholder="输入规则编号">
+                </div>
+            </div>
+        </div>
+
+        <!-- 输入区域 -->
+        <div class="mb-4">
+            <label for="inputText" class="form-label" data-lang-en="Input Text:" data-lang-zh="输入文本:">Input Text:</label>
+            <textarea class="form-control" id="inputText" rows="5" placeholder="Enter text to process" data-lang-en-placeholder="Enter text to process" data-lang-zh-placeholder="请输入要处理的文本"></textarea>
+        </div>
+        
+        <!-- 执行按钮 -->
+        <div class="d-grid gap-2 mb-4">
+            <button class="btn btn-primary" id="processBtn" data-lang-en="Execute Translation" data-lang-zh="执行翻译">Execute Translation</button>
+            <button class="btn btn-outline-secondary" id="clearBtn" data-lang-en="Clear Content" data-lang-zh="清空内容">Clear Content</button>
+        </div>
+        
+        <!-- 加载动画 -->
+        <div class="loading" id="loadingIndicator">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden" data-lang-en="Loading..." data-lang-zh="加载中...">Loading...</span>
+            </div>
+            <p data-lang-en="Processing, please wait..." data-lang-zh="处理中，请稍候...">Processing, please wait...</p>
+        </div>
+        
+        <!-- 结果区域 -->
+        <div id="resultSection" style="display: none;">
+            <h4 data-lang-en="Translation Result" data-lang-zh="翻译结果">Translation Result</h4>
+            <div class="rule-info" id="ruleInfo"></div>
+            <div class="result-box mb-3">
+                <div id="resultText"></div>
+            </div>
+            <div class="d-flex justify-content-end">
+                <button class="btn btn-sm btn-success me-2" id="copyBtn" data-lang-en="Copy Result" data-lang-zh="复制结果">Copy Result</button>
+                <button class="btn btn-sm btn-outline-primary" id="downloadBtn" data-lang-en="Download Result" data-lang-zh="下载结果">Download Result</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提示框 -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="resultToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto" id="toastTitle" data-lang-en="Notice" data-lang-zh="提示">Notice</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body" id="toastMessage"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 语言切换
+            const langEn = document.getElementById('langEn');
+            const langZh = document.getElementById('langZh');
+            
+            // 初始化语言 (从localStorage获取或默认为英文)
+            const currentLang = localStorage.getItem('preferredLanguage') || 'en';
+            setLanguage(currentLang);
+            
+            // 语言按钮状态
+            if (currentLang === 'zh') {
+                langZh.classList.add('active');
+                langEn.classList.remove('active');
+            } else {
+                langEn.classList.add('active');
+                langZh.classList.remove('active');
+            }
+
+            // 语言切换事件
+            langEn.addEventListener('click', function() {
+                setLanguage('en');
+                langEn.classList.add('active');
+                langZh.classList.remove('active');
+                localStorage.setItem('preferredLanguage', 'en');
+            });
+            
+            langZh.addEventListener('click', function() {
+                setLanguage('zh');
+                langZh.classList.add('active');
+                langEn.classList.remove('active');
+                localStorage.setItem('preferredLanguage', 'zh');
+            });
+            
+            // 设置语言
+            function setLanguage(lang) {
+                const elements = document.querySelectorAll('[data-lang-' + lang + ']');
+                elements.forEach(el => {
+                    el.textContent = el.getAttribute('data-lang-' + lang);
+                });
+                
+                // 设置placeholder
+                const placeholders = document.querySelectorAll('[data-lang-' + lang + '-placeholder]');
+                placeholders.forEach(el => {
+                    el.setAttribute('placeholder', el.getAttribute('data-lang-' + lang + '-placeholder'));
+                });
+            }
+
+            // 元素引用
+            const operationRadios = document.querySelectorAll('input[name="operation"]');
+            const modeSelection = document.getElementById('modeSelection');
+            const ruleIndexGroup = document.getElementById('ruleIndexGroup');
+            const inputText = document.getElementById('inputText');
+            const processBtn = document.getElementById('processBtn');
+            const clearBtn = document.getElementById('clearBtn');
+            const resultSection = document.getElementById('resultSection');
+            const resultText = document.getElementById('resultText');
+            const ruleInfo = document.getElementById('ruleInfo');
+            const copyBtn = document.getElementById('copyBtn');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            
+            // Toast 组件
+            const resultToast = new bootstrap.Toast(document.getElementById('resultToast'));
+            const toastTitle = document.getElementById('toastTitle');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            // 操作切换
+            operationRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    if (this.value === 'encrypt') {
+                        modeSelection.style.display = 'block';
+                        ruleIndexGroup.style.display = 'none';
+                    } else {
+                        modeSelection.style.display = 'none';
+                        ruleIndexGroup.style.display = 'block';
+                    }
+                });
+            });
+            
+            // 清空按钮
+            clearBtn.addEventListener('click', function() {
+                inputText.value = '';
+                resultSection.style.display = 'none';
+            });
+            
+            // 复制结果
+            copyBtn.addEventListener('click', function() {
+                const textToCopy = resultText.textContent;
+                navigator.clipboard.writeText(textToCopy).then(function() {
+                    showToast(
+                        currentLang === 'en' ? 'Success' : '成功', 
+                        currentLang === 'en' ? 'Copied to clipboard' : '已复制到剪贴板'
+                    );
+                }, function() {
+                    showToast(
+                        currentLang === 'en' ? 'Error' : '错误', 
+                        currentLang === 'en' ? 'Copy failed, please copy manually' : '复制失败，请手动复制'
+                    );
+                });
+            });
+            
+            // 下载结果
+            downloadBtn.addEventListener('click', function() {
+                const textToDownload = resultText.textContent;
+                const blob = new Blob([textToDownload], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const fileName = currentLang === 'en' ? 
+                    `CipherResult_${new Date().toISOString().slice(0, 10)}.txt` : 
+                    `密文翻译结果_${new Date().toISOString().slice(0, 10)}.txt`;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+            
+            // 执行翻译
+            processBtn.addEventListener('click', function() {
+                const text = inputText.value.trim();
+                if (!text) {
+                    showToast(
+                        currentLang === 'en' ? 'Warning' : '警告', 
+                        currentLang === 'en' ? 'Please enter text to process' : '请输入要处理的文本'
+                    );
+                    return;
+                }
+                
+                const operation = document.querySelector('input[name="operation"]:checked').value;
+                
+                if (operation === 'encrypt') {
+                    const mode = document.getElementById('encryptMode').value;
+                    encrypt(text, mode);
+                } else {
+                    const ruleIndex = document.getElementById('ruleIndex').value;
+                    if (!ruleIndex) {
+                        showToast(
+                            currentLang === 'en' ? 'Warning' : '警告', 
+                            currentLang === 'en' ? 'Please enter rule number' : '请输入规则编号'
+                        );
+                        return;
+                    }
+                    decrypt(text, ruleIndex);
+                }
+            });
+            
+            // 加密函数
+            function encrypt(text, mode) {
+                loadingIndicator.style.display = 'block';
+                resultSection.style.display = 'none';
+                
+                fetch('/api/encrypt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        mode: mode,
+                        lang: currentLang
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || (currentLang === 'en' ? 'Encryption failed' : '加密失败'));
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    resultText.textContent = data.result;
+                    const modeLabel = getModeLabel(data.mode, currentLang);
+                    ruleInfo.innerHTML = currentLang === 'en' ? 
+                        `<strong>Encryption Info:</strong> Rule Number: ${data.rule_index}, Mode: ${modeLabel}` : 
+                        `<strong>加密信息:</strong> 规则编号: ${data.rule_index}, 模式: ${modeLabel}`;
+                    resultSection.style.display = 'block';
+                })
+                .catch(error => {
+                    showToast(currentLang === 'en' ? 'Error' : '错误', error.message);
+                })
+                .finally(() => {
+                    loadingIndicator.style.display = 'none';
+                });
+            }
+            
+            // 解密函数
+            function decrypt(text, ruleIndex) {
+                loadingIndicator.style.display = 'block';
+                resultSection.style.display = 'none';
+                
+                fetch('/api/decrypt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        rule_index: ruleIndex,
+                        lang: currentLang
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || (currentLang === 'en' ? 'Decryption failed' : '解密失败'));
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    resultText.textContent = data.result;
+                    ruleInfo.innerHTML = currentLang === 'en' ? 
+                        `<strong>Decryption Info:</strong> Rule Number: ${ruleIndex}` : 
+                        `<strong>解密信息:</strong> 使用规则编号: ${ruleIndex}`;
+                    resultSection.style.display = 'block';
+                })
+                .catch(error => {
+                    showToast(currentLang === 'en' ? 'Error' : '错误', error.message);
+                })
+                .finally(() => {
+                    loadingIndicator.style.display = 'none';
+                });
+            }
+            
+            // 辅助函数
+            function showToast(title, message) {
+                toastTitle.textContent = title;
+                toastMessage.textContent = message;
+                resultToast.show();
+            }
+            
+            function getModeLabel(mode, lang) {
+                const modes = {
+                    'en': {
+                        'substitution': 'Substitution Mode',
+                        'shift': 'Shift Mode',
+                        'mixed': 'Mixed Mode'
+                    },
+                    'zh': {
+                        'substitution': '替换模式',
+                        'shift': '移位模式',
+                        'mixed': '混合模式'
+                    }
+                };
+                return modes[lang][mode] || mode;
+            }
+            
+            // 检查 localStorage 是否有从历史页面过来的数据
+            if (localStorage.getItem('translationInput') && localStorage.getItem('translationRuleIndex')) {
+                inputText.value = localStorage.getItem('translationInput');
+                document.getElementById('decrypt').checked = true;
+                modeSelection.style.display = 'none';
+                ruleIndexGroup.style.display = 'block';
+                document.getElementById('ruleIndex').value = localStorage.getItem('translationRuleIndex');
+                
+                // 清除 localStorage 中的数据
+                localStorage.removeItem('translationInput');
+                localStorage.removeItem('translationRuleIndex');
+            }
+        });
+    </script>
+</body>
+</html> 
