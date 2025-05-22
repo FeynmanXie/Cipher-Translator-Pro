@@ -5,13 +5,26 @@ import json
 import os
 from datetime import datetime
 import uuid
+from supabase import create_client
+from dotenv import load_dotenv
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # 用于会话管理
 
-# 配置文件路径
-RULES_FILE = "cipher_rules.json"
-HISTORY_FILE = "cipher_history.json"
+# 加载环境变量
+load_dotenv()
+
+# Supabase配置
+SUPABASE_URL = "https://kjjnxkbvzjqlwecsssfr.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtqam54a2J2empxbHdlY3Nzc2ZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc5MjYwMTIsImV4cCI6MjA2MzUwMjAxMn0.iYka9HU_Ux2Via_1juqPa4cK9XeqluqsWkNHbj9k0NY"
+
+# 初始化Supabase客户端
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# 表名
+RULES_TABLE = "cipher_rules"
+HISTORY_TABLE = "cipher_history"
+DEVICES_TABLE = "devices"
 
 # 加密模式
 MODES = {
@@ -63,47 +76,138 @@ def generate_rule(mode="substitution", shift_value=0):
             "shift": shift_value
         }
 
-# 加载或创建规则
+# 从数据库加载规则
 def load_rules():
-    if os.path.exists(RULES_FILE):
-        with open(RULES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+    try:
+        response = supabase.table(RULES_TABLE).select("*").execute()
+        return response.data
+    except Exception as e:
+        print(f"Error loading rules: {e}")
+        # 如果数据库操作失败，返回内存中的规则（如果有）
+        return getattr(app, 'memory_rules', [])
 
-# 保存新规则
+# 保存新规则到数据库
 def save_new_rule(rule):
-    rules = load_rules()
-    rules.append(rule)
-    with open(RULES_FILE, "w", encoding="utf-8") as f:
-        json.dump(rules, f, ensure_ascii=False, indent=2)
-    return len(rules) - 1  # 返回新规则的索引
+    try:
+        # 将规则转换为JSON字符串
+        rule_json = json.dumps(rule)
+        # 插入规则并获取返回的数据
+        response = supabase.table(RULES_TABLE).insert({"rule_data": rule_json}).execute()
+        # 返回新插入规则的ID
+        if response.data and len(response.data) > 0:
+            return response.data[0]['id']
+    except Exception as e:
+        print(f"Error saving rule: {e}")
+        # 如果数据库操作失败，备用方案是使用内存存储
+        if not hasattr(app, 'memory_rules'):
+            app.memory_rules = []
+        app.memory_rules.append(rule)
+        return len(app.memory_rules) - 1
+    
+    return -1
 
-# 加载历史记录
+# 从数据库加载历史记录
 def load_history():
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+    response = supabase.table(HISTORY_TABLE).select("*").execute()
+    return response.data
 
-# 保存历史记录
-def save_history(history):
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
+# 获取或创建设备ID
+def get_device_id():
+    if 'device_id' not in session:
+        # 生成一个新的设备ID
+        device_id = str(uuid.uuid4())
 
-# 添加历史记录
-def add_history(operation, input_text, output_text, rule_index, user_id):
-    history = load_history()
-    history.append({
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "operation": operation,  # 支持中英文操作名称
-        "input": input_text,
-        "output": output_text,
-        "rule_index": rule_index,
-        "user_id": user_id
-    })
-    if len(history) > 1000:  # 限制历史记录数量
-        history = history[-1000:]
-    save_history(history)
+        try:
+            # 尝试保存到数据库
+            response = supabase.table(DEVICES_TABLE).insert({
+                "device_id": device_id,
+                "created_at": datetime.now().isoformat()
+            }).execute()
+
+            # 检查插入是否成功
+            if response.data and len(response.data) > 0:
+                session['device_id'] = device_id
+                print(f"Successfully saved new device ID: {device_id}")
+            else:
+                # 插入失败，不设置session，返回None
+                print(f"Failed to save new device ID {device_id} to database.")
+                return None
+
+        except Exception as e:
+            # 如果插入发生异常，打印错误，不设置session，返回None
+            print(f"Error saving device ID: {e}")
+            return None
+
+    # 如果session中已有device_id，直接返回
+    return session.get('device_id')
+
+# 添加历史记录到数据库 (修改以处理get_device_id返回None的情况)
+def add_history(operation, input_text, output_text, rule_index, device_id):
+    # 如果无法获取有效的device_id，则只使用内存存储
+    if device_id is None:
+        print("Warning: No valid device ID available, using memory history only.")
+        if not hasattr(app, 'memory_history'):
+            app.memory_history = []
+        app.memory_history.append({
+            "timestamp": datetime.now().isoformat(),
+            "operation": operation,
+            "input_text": input_text,
+            "output_text": output_text,
+            "rule_id": rule_index,
+            "device_id": "unknown" # 使用一个占位符或标记
+        })
+        return
+
+    # 准备历史记录数据
+    history_data = {
+        "timestamp": datetime.now().isoformat(),
+        "operation": operation,
+        "input_text": input_text,
+        "output_text": output_text,
+        "rule_id": rule_index,
+        "device_id": device_id
+    }
+
+    try:
+        # 插入数据到数据库
+        supabase.table(HISTORY_TABLE).insert(history_data).execute()
+        print(f"Successfully added history record for device ID: {device_id}")
+    except Exception as e:
+        print(f"Error adding history to database: {e}")
+        # 如果数据库操作失败，备用方案是使用内存存储
+        if not hasattr(app, 'memory_history'):
+            app.memory_history = []
+        app.memory_history.append(history_data)
+
+# 根据设备ID获取历史记录
+def get_device_history(device_id):
+    try:
+        response = supabase.table(HISTORY_TABLE).select("*").eq("device_id", device_id).execute()
+        return response.data
+    except Exception as e:
+        print(f"Error getting history: {e}")
+        # 如果数据库操作失败，返回内存中的历史记录（如果有）
+        memory_history = getattr(app, 'memory_history', [])
+        return [h for h in memory_history if h.get('device_id') == device_id]
+
+# 获取规则详情
+def get_rule_by_id(rule_id):
+    try:
+        # 先尝试从数据库获取
+        response = supabase.table(RULES_TABLE).select("*").eq("id", rule_id).execute()
+        if response.data and len(response.data) > 0:
+            rule_data = response.data[0]
+            # 将JSON字符串转换回Python对象
+            return json.loads(rule_data['rule_data'])
+    except Exception as e:
+        print(f"Error getting rule: {e}")
+        
+    # 如果从数据库获取失败，尝试从内存中获取
+    memory_rules = getattr(app, 'memory_rules', [])
+    if isinstance(rule_id, int) and 0 <= rule_id < len(memory_rules):
+        return memory_rules[rule_id]
+    
+    return None
 
 # 获取请求的语言
 def get_language(request):
@@ -119,16 +223,14 @@ def get_language(request):
 
 # 加密函数
 def encrypt_text(text, mode="substitution", rule_index=None, shift_value=0):
-    rules = load_rules()
-    
     # 创建新规则
     if rule_index is None:
         rule = generate_rule(mode, shift_value)
         rule_index = save_new_rule(rule)
     else:
-        if rule_index >= len(rules):
+        rule = get_rule_by_id(rule_index)
+        if not rule:
             return "无效的规则编号！", -1
-        rule = rules[rule_index]
     
     # 根据模式执行加密
     if rule["mode"] == "substitution":
@@ -165,11 +267,10 @@ def encrypt_text(text, mode="substitution", rule_index=None, shift_value=0):
 
 # 解密函数
 def decrypt_text(encrypted_text, rule_index):
-    rules = load_rules()
-    if not rules or rule_index >= len(rules):
+    rule = get_rule_by_id(rule_index)
+    if not rule:
         return "无效的规则编号！"
     
-    rule = rules[rule_index]
     result = ""
     
     # 根据模式执行解密
@@ -206,21 +307,10 @@ def decrypt_text(encrypted_text, rule_index):
     
     return result
 
-# 确保用户有ID
-def get_user_id():
-    if 'user_id' not in session:
-        session['user_id'] = str(uuid.uuid4())
-    return session['user_id']
-
-# 根据用户ID获取历史记录
-def get_user_history(user_id):
-    all_history = load_history()
-    return [h for h in all_history if h.get('user_id') == user_id]
-
 # 路由
 @app.route('/')
 def index():
-    user_id = get_user_id()
+    device_id = get_device_id()
     return render_template('index.html', modes=MODES)
 
 # API 路由 - 加密
@@ -238,12 +328,12 @@ def api_encrypt():
     if not text:
         return jsonify({'error': ERROR_MESSAGES["empty_text"][lang]}), 400
     
-    user_id = get_user_id()
+    device_id = get_device_id()
     result, rule_index = encrypt_text(text, mode)
     
     # 添加到历史记录，根据语言保存操作名称
     operation = "Encrypt" if lang == "en" else "加密"
-    add_history(operation, text, result, rule_index, user_id)
+    add_history(operation, text, result, rule_index, device_id)
     
     return jsonify({
         'result': result,
@@ -274,12 +364,12 @@ def api_decrypt():
     except ValueError:
         return jsonify({'error': ERROR_MESSAGES["invalid_rule"][lang]}), 400
     
-    user_id = get_user_id()
+    device_id = get_device_id()
     result = decrypt_text(text, rule_index)
     
     # 添加到历史记录，根据语言保存操作名称
     operation = "Decrypt" if lang == "en" else "解密"
-    add_history(operation, text, result, rule_index, user_id)
+    add_history(operation, text, result, rule_index, device_id)
     
     return jsonify({
         'result': result
@@ -288,16 +378,57 @@ def api_decrypt():
 # 历史记录路由
 @app.route('/history')
 def history():
-    user_id = get_user_id()
-    user_history = get_user_history(user_id)
-    return render_template('history.html', history=user_history)
+    device_id = get_device_id()
+    device_history = get_device_history(device_id)
+    return render_template('history.html', history=device_history)
 
 # API 路由 - 获取历史记录
 @app.route('/api/history')
 def api_history():
-    user_id = get_user_id()
-    user_history = get_user_history(user_id)
-    return jsonify(user_history)
+    device_id = get_device_id()
+    device_history = get_device_history(device_id)
+    return jsonify(device_history)
+
+# API 路由 - 清空历史记录
+@app.route('/api/clear_history', methods=['POST'])
+def api_clear_history():
+    # 获取设备ID
+    device_id = get_device_id()
+    
+    # 如果无法获取设备ID，返回错误
+    if device_id is None:
+        print("Clear history failed: Unable to get device ID.")
+        return jsonify({'success': False, 'message': 'Unable to get device ID'}), 400
+
+    print(f"Attempting to clear history for device ID: {device_id}")
+
+    try:
+        # 从数据库中删除该设备的所有历史记录
+        # 在 v2.x 中，成功的 delete() 通常返回 APIResponse 对象，
+        # 如果数据库层面有错误（如RLS策略限制），会抛出异常。
+        response = supabase.table(HISTORY_TABLE).delete().eq('device_id', device_id).execute()
+
+        # 如果 execute() 没有抛出异常，认为请求已成功发送到 Supabase
+        print(f"Supabase delete request sent successfully for device ID: {device_id}. Response data: {response.data}, Count: {response.count}")
+        # 您可以使用 print(json.dumps(response.__dict__, indent=2, default=str)) 来调试查看原始结构
+
+        # 清空内存中的历史记录 (可选，如果使用内存备用存储的话)
+        if hasattr(app, 'memory_history'):
+             # 只保留不匹配当前device_id的记录
+             app.memory_history = [h for h in getattr(app, 'memory_history', []) if h.get('device_id') != device_id]
+             print(f"Cleared memory history for device ID: {device_id}")
+
+        # 返回成功响应
+        return jsonify({'success': True, 'message': '历史记录清除请求已处理'}), 200
+
+    except Exception as e:
+        # 捕获数据库操作或程序内部异常
+        print(f"Error clearing history from database for device ID {device_id}: {e}")
+        return jsonify({
+            "success": False,
+            "message": "执行历史记录清除操作时发生错误",
+            "error": str(e)
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True) 

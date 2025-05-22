@@ -6,6 +6,7 @@
     <title>History - Cipher Translator Pro</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <style>
         body {
             background-color: #f8f9fa;
@@ -184,6 +185,27 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // 元素引用
+            const historyTableBody = document.getElementById('historyTableBody');
+            const noRecordsMessage = document.getElementById('noRecords');
+            const refreshBtn = document.getElementById('refreshBtn');
+            const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            
+            // 模态框元素
+            const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+            const modalTime = document.getElementById('modalTime');
+            const modalOperation = document.getElementById('modalOperation');
+            const modalRuleIndex = document.getElementById('modalRuleIndex');
+            const modalInput = document.getElementById('modalInput');
+            const modalOutput = document.getElementById('modalOutput');
+            const useForTranslationBtn = document.getElementById('useForTranslationBtn');
+            
+            // Toast 组件
+            const resultToast = new bootstrap.Toast(document.getElementById('resultToast'));
+            const toastTitle = document.getElementById('toastTitle');
+            const toastMessage = document.getElementById('toastMessage');
+
             // 语言切换
             const langEn = document.getElementById('langEn');
             const langZh = document.getElementById('langZh');
@@ -229,27 +251,6 @@
                 }
             }
 
-            // 元素引用
-            const historyTableBody = document.getElementById('historyTableBody');
-            const noRecordsMessage = document.getElementById('noRecords');
-            const refreshBtn = document.getElementById('refreshBtn');
-            const clearHistoryBtn = document.getElementById('clearHistoryBtn');
-            const loadingIndicator = document.getElementById('loadingIndicator');
-            
-            // 模态框元素
-            const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
-            const modalTime = document.getElementById('modalTime');
-            const modalOperation = document.getElementById('modalOperation');
-            const modalRuleIndex = document.getElementById('modalRuleIndex');
-            const modalInput = document.getElementById('modalInput');
-            const modalOutput = document.getElementById('modalOutput');
-            const useForTranslationBtn = document.getElementById('useForTranslationBtn');
-            
-            // Toast 组件
-            const resultToast = new bootstrap.Toast(document.getElementById('resultToast'));
-            const toastTitle = document.getElementById('toastTitle');
-            const toastMessage = document.getElementById('toastMessage');
-            
             // 当前选中的记录
             let selectedRecord = null;
             
@@ -274,9 +275,12 @@
                         data.forEach((record, index) => {
                             const row = document.createElement('tr');
                             
+                            // 格式化时间戳
+                            const formattedTimestamp = new Date(record.timestamp).toLocaleString();
+
                             // 格式化输入输出文本
-                            const inputShort = truncateText(record.input, 30);
-                            const outputShort = truncateText(record.output, 30);
+                            const inputShort = truncateText(record.input_text, 30);
+                            const outputShort = truncateText(record.output_text, 30);
                             
                             // 本地化操作类型
                             const opType = record.operation === '加密' ? 
@@ -288,9 +292,9 @@
                             const copyTitle = currentLang === 'en' ? 'Copy Result' : '复制结果';
                             
                             row.innerHTML = `
-                                <td>${record.timestamp}</td>
+                                <td>${formattedTimestamp}</td>
                                 <td><span class="badge ${opType.toLowerCase() === 'encrypt' || opType === '加密' ? 'bg-success' : 'bg-info'}">${opType}</span></td>
-                                <td>${record.rule_index}</td>
+                                <td>${record.rule_id}</td>
                                 <td class="truncate">${inputShort}</td>
                                 <td class="truncate">${outputShort}</td>
                                 <td>
@@ -313,7 +317,7 @@
                         document.querySelectorAll('.bi-clipboard').forEach(el => {
                             el.addEventListener('click', function() {
                                 const index = parseInt(this.getAttribute('data-index'));
-                                copyToClipboard(data[index].output);
+                                copyToClipboard(data[index].output_text);
                             });
                         });
                     })
@@ -342,9 +346,9 @@
                     modalOperation.textContent = currentLang === 'en' ? 'Decrypt' : '解密';
                 }
                 
-                modalRuleIndex.textContent = record.rule_index;
-                modalInput.textContent = record.input;
-                modalOutput.textContent = record.output;
+                modalRuleIndex.textContent = record.rule_id;
+                modalInput.textContent = record.input_text;
+                modalOutput.textContent = record.output_text;
                 
                 detailModal.show();
             }
@@ -385,24 +389,47 @@
                     '确定要清空所有历史记录吗？此操作不可撤销。';
                 
                 if (confirm(confirmMsg)) {
-                    // 这里应发送请求清空历史，但为简化，我们直接重新加载
+                    // 显示加载动画
                     loadingIndicator.style.display = 'block';
                     
-                    setTimeout(() => {
-                        loadHistory();
+                    // 发送请求清空历史
+                    fetch('/api/clear_history', {
+                        method: 'POST'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showToast(
+                                currentLang === 'en' ? 'Success' : '成功',
+                                currentLang === 'en' ? 'History records cleared' : '历史记录已清空'
+                            );
+                            // 清空成功后重新加载历史记录
+                            loadHistory();
+                        } else {
+                             showToast(
+                                currentLang === 'en' ? 'Error' : '错误',
+                                currentLang === 'en' ? data.message || 'Failed to clear history records' : data.message || '清空历史记录失败'
+                            );
+                        }
+                    })
+                    .catch(error => {
                         showToast(
-                            currentLang === 'en' ? 'Success' : '成功',
-                            currentLang === 'en' ? 'History records cleared' : '历史记录已清空'
+                            currentLang === 'en' ? 'Error' : '错误',
+                            currentLang === 'en' ? 'Failed to clear history records' : '清空历史记录失败'
                         );
-                    }, 500);
+                        console.error('Error:', error);
+                    })
+                    .finally(() => {
+                        loadingIndicator.style.display = 'none';
+                    });
                 }
             });
             
             useForTranslationBtn.addEventListener('click', function() {
                 if (selectedRecord) {
                     // 存储到 localStorage，以便在翻译页面使用
-                    localStorage.setItem('translationInput', selectedRecord.input);
-                    localStorage.setItem('translationRuleIndex', selectedRecord.rule_index);
+                    localStorage.setItem('translationInput', selectedRecord.input_text);
+                    localStorage.setItem('translationRuleIndex', selectedRecord.rule_id);
                     
                     // 跳转到翻译页面
                     window.location.href = '/';
